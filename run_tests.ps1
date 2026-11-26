@@ -1,3 +1,3 @@
 ﻿$ErrorActionPreference = "Stop"
 $env:PYTHONPATH = "."
-pytest -v tests
+python -m pytest -v tests
