@@ -24,21 +24,36 @@ def load_raw_transactions(data_dir: str) -> pd.DataFrame:
         return df
 
     if {"year", "month", "day"}.issubset(df.columns):
-        df["date"] = pd.to_datetime(df[["year", "month", "day"]], errors="coerce").dt.normalize()
+        date_series = pd.to_datetime(
+            {
+                "year": pd.to_numeric(df["year"], errors="coerce"),
+                "month": pd.to_numeric(df["month"], errors="coerce"),
+                "day": pd.to_numeric(df["day"], errors="coerce"),
+            },
+            errors="coerce",
+        )
+        df = df.assign(date=date_series.dt.normalize())
     elif "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.normalize()
+        df = df.assign(date=pd.to_datetime(df["date"], errors="coerce").dt.normalize())
     else:
         raise ValueError("El conjunto de datos no contiene columnas de fecha válidas.")
 
     price_col = "price" if "price" in df.columns else ("revenue" if "revenue" in df.columns else None)
-    df["revenue"] = pd.to_numeric(df[price_col], errors="coerce").fillna(0.0) if price_col else 0.0
+    revenue_series = pd.to_numeric(df[price_col], errors="coerce").fillna(0.0) if price_col else 0.0
 
     views_col = "times_viewed" if "times_viewed" in df.columns else ("total_views" if "total_views" in df.columns else None)
-    df["total_views"] = pd.to_numeric(df[views_col], errors="coerce").fillna(1.0) if views_col else 1.0
+    views_series = pd.to_numeric(df[views_col], errors="coerce").fillna(1.0) if views_col else 1.0
 
-    df["purchases"] = 1
-    df["country"] = df.get("country", "unknown").fillna("unknown").astype(str)
-    return df.dropna(subset=["date"]).reset_index(drop=True)
+    country_series = df["country"].fillna("unknown").astype(str) if "country" in df.columns else "unknown"
+
+    cleaned = df.assign(
+        revenue=revenue_series,
+        total_views=views_series,
+        purchases=1,
+        country=country_series,
+    ).dropna(subset=["date"])
+
+    return cleaned.reset_index(drop=True)
 
 
 def aggregate_daily(df: pd.DataFrame, country: str | None = None) -> pd.DataFrame:
@@ -46,8 +61,22 @@ def aggregate_daily(df: pd.DataFrame, country: str | None = None) -> pd.DataFram
         return pd.DataFrame(columns=["date", "revenue", "purchases", "total_views"])
 
     working = df.copy()
+    if "date" not in working.columns and {"year", "month", "day"}.issubset(working.columns):
+        working["date"] = pd.to_datetime(
+            {
+                "year": pd.to_numeric(working["year"], errors="coerce"),
+                "month": pd.to_numeric(working["month"], errors="coerce"),
+                "day": pd.to_numeric(working["day"], errors="coerce"),
+            },
+            errors="coerce",
+        ).dt.normalize()
+
+    working["date"] = pd.to_datetime(working["date"], errors="coerce").dt.normalize()
+    working = working.dropna(subset=["date"])
+
     if country and country.lower() not in {"all", "global", "combined"}:
-        working = working[working["country"].str.lower() == country.lower()]
+        if "country" in working.columns:
+            working = working[working["country"].astype(str).str.lower() == country.lower()]
 
     if working.empty:
         return pd.DataFrame(columns=["date", "revenue", "purchases", "total_views"])
