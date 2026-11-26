@@ -74,6 +74,23 @@ def aggregate_daily(df: pd.DataFrame, country: str | None = None) -> pd.DataFram
     working["date"] = pd.to_datetime(working["date"], errors="coerce").dt.normalize()
     working = working.dropna(subset=["date"])
 
+    if "revenue" not in working.columns:
+        price_col = "price" if "price" in working.columns else None
+        working["revenue"] = pd.to_numeric(working[price_col], errors="coerce").fillna(0.0) if price_col else 0.0
+    else:
+        working["revenue"] = pd.to_numeric(working["revenue"], errors="coerce").fillna(0.0)
+
+    if "total_views" not in working.columns:
+        views_col = "times_viewed" if "times_viewed" in working.columns else None
+        working["total_views"] = pd.to_numeric(working[views_col], errors="coerce").fillna(1.0) if views_col else 1.0
+    else:
+        working["total_views"] = pd.to_numeric(working["total_views"], errors="coerce").fillna(0.0)
+
+    if "purchases" not in working.columns:
+        working["purchases"] = 1
+    else:
+        working["purchases"] = pd.to_numeric(working["purchases"], errors="coerce").fillna(1).astype(int)
+
     if country and country.lower() not in {"all", "global", "combined"}:
         if "country" in working.columns:
             working = working[working["country"].astype(str).str.lower() == country.lower()]
